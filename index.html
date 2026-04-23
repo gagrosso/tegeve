@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TGV Intel — Tech Radar Builder</title>
+<meta name="description" content="Inteligencia comercial B2B para prospección consultiva. Genera prompts de radiografía tecnológica profunda. Por TGV.">
+<meta name="author" content="TGV — TeGeVe">
+<meta property="og:title" content="TGV Intel — Tech Radar Builder">
+<meta property="og:description" content="Inteligencia comercial B2B para prospección consultiva">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230A1628'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='%2306B6D4' font-family='system-ui' font-weight='bold'>T</text></svg>">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+  pre { font-family: 'SF Mono', Monaco, 'Courier New', monospace; }
+  .fade-in { animation: fadeIn .2s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.400.0?deps=react@18.3.1"
+  }
+}
+</script>
+
+<script type="module">
+import React, { useState, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
+import { Building2, Link2, Globe, GripVertical, ChevronUp, ChevronDown, X, Plus, Copy, Check, FileText, Target } from 'lucide-react';
+
+const h = React.createElement;
+
+// ══════════════════════════════════════════════════════════
+// IDENTIDAD TGV — inspirada en tgv.com.ar
+// Reemplazá estos hex si tenés el manual de marca oficial.
+// ══════════════════════════════════════════════════════════
+const TGV = {
+  primary: '#0A1628',
+  primaryHover: '#132540',
+  accent: '#1E3A8A',
+  accentHover: '#1E40AF',
+  highlight: '#06B6D4',
+  highlightSoft: '#CFFAFE',
+  success: '#10B981',
+  bg: '#F1F5F9',
+  card: '#FFFFFF',
+  border: '#E2E8F0',
+  textPrimary: '#0F172A',
+  textSecondary: '#475569',
+  textMuted: '#94A3B8',
+};
+
+const CATS = {
+  bi: { name: 'BI / Analytics / Data', kws: 'Power BI, Tableau, Qlik, data warehouse, analytics, big data, ETL, data lake, Databricks', main: 'Power BI', or: ['Power BI','Tableau','Qlik','data warehouse','analytics'], tools: ['Power BI','Tableau','Qlik','Databricks'], li: ['Power BI','Tableau','Qlik'], impl: 'Power BI Tableau', pain: 'reportes manuales, Excel, decisiones sin datos, falta de single source of truth' },
+  erp: { name: 'ERP / Gestión Empresarial', kws: 'SAP, Oracle, Microsoft Dynamics, ERP, gestión empresarial, Netsuite, JD Edwards, S/4HANA', main: 'SAP', or: ['SAP','Oracle','Microsoft Dynamics','ERP','S/4HANA'], tools: ['SAP','Oracle','Microsoft Dynamics','JD Edwards'], li: ['SAP','Oracle','JD Edwards'], impl: 'SAP Oracle', pain: 'migración S/4HANA, ERP legacy, falta de consultor, proyectos parados, customizaciones inmanejables' },
+  ia: { name: 'IA / RPA / Automatización', kws: 'inteligencia artificial, IA, RPA, machine learning, chatbots, automatización, agentes IA, copilot', main: 'inteligencia artificial', or: ['inteligencia artificial','IA','RPA','machine learning','chatbots'], tools: ['UiPath','Automation Anywhere','OpenAI','Copilot'], li: ['inteligencia artificial','RPA','machine learning'], impl: 'inteligencia artificial RPA', pain: 'procesos manuales repetitivos, pilotos sin escalar, IA sin gobernanza, ROI no medido' },
+  apps: { name: 'Desarrollo de Apps / Software', kws: 'desarrollo, apps, DevOps, CI/CD, microservicios, Kubernetes, Docker, React, Angular, .NET, fábrica de software', main: 'desarrollo a medida', or: ['desarrollo','apps','DevOps','microservicios','fábrica de software'], tools: ['Docker','Kubernetes','Jenkins','GitHub'], li: ['desarrollo','DevOps','arquitecto software'], impl: 'desarrollo software', pain: 'deuda técnica, legacy modernization, time-to-market lento, falta de talento dev' },
+  hw: { name: 'Hardware / Infraestructura', kws: 'Dell, HP, Lenovo, Cisco, servidores, storage, networking, data center, on-premise', main: 'Dell', or: ['Dell','HP','Lenovo','Cisco','servidores'], tools: ['Dell','HP','Lenovo','Cisco'], li: ['Dell','HP','Cisco'], impl: 'Dell HP', pain: 'hardware obsoleto, data center saturado, costes operativos altos' },
+  cloud: { name: 'Cloud / IaaS / PaaS', kws: 'AWS, Azure, GCP, cloud, migración cloud, híbrida, IaaS, PaaS, nube privada', main: 'AWS', or: ['AWS','Azure','GCP','cloud','migración cloud'], tools: ['AWS','Azure','GCP','Kubernetes'], li: ['AWS','Azure','GCP'], impl: 'AWS Azure', pain: 'migración estancada, costes cloud descontrolados, multicloud desordenado, vendor lock-in' },
+  cyber: { name: 'Ciberseguridad', kws: 'Fortinet, Palo Alto, CrowdStrike, firewall, SOC, SIEM, zero trust, NIS2, CASB, SASE', main: 'ciberseguridad', or: ['Fortinet','Palo Alto','CrowdStrike','firewall','SOC'], tools: ['Fortinet','Palo Alto','CrowdStrike','SIEM'], li: ['ciberseguridad','Fortinet','SOC'], impl: 'Fortinet SIEM', pain: 'NIS2, incidentes recientes, ransomware en sector, falta de SOC, compliance pendiente' },
+  dw: { name: 'Digital Workplace / Colaboración', kws: 'Microsoft 365, Google Workspace, Teams, Slack, endpoint, VDI, SharePoint, Copilot', main: 'Microsoft 365', or: ['Microsoft 365','Google Workspace','Teams','Slack','endpoint'], tools: ['Microsoft 365','Google Workspace','Teams','SharePoint'], li: ['Microsoft 365','Teams','SharePoint'], impl: 'Microsoft 365 Teams', pain: 'productividad dispersa, información en silos, shadow IT, licencias no optimizadas' },
+  telco: { name: 'Telecomunicaciones', kws: 'conectividad, MPLS, SD-WAN, telefonía IP, UCaaS, contact center', main: 'conectividad', or: ['conectividad','MPLS','SD-WAN','telefonía IP','UCaaS'], tools: ['MPLS','SD-WAN','UCaaS','contact center'], li: ['conectividad','SD-WAN','telefonía IP'], impl: 'SD-WAN MPLS', pain: 'redes legacy, latencia entre sedes, costes MPLS, modelos híbridos sin solución' },
+  consult: { name: 'Consultoría / Servicios IT', kws: 'consultoría, outsourcing, staff augmentation, managed services, integración, transformación digital', main: 'consultoría', or: ['consultoría','outsourcing','managed services','integración','transformación digital'], tools: ['Accenture','Deloitte','Capgemini','IBM'], li: ['consultoría','transformación digital','outsourcing'], impl: 'consultoría outsourcing', pain: 'dependencia de Big4, costes altos, falta de expertise específico, rotación de consultores' },
+  proc: { name: 'Compras / Procurement IT', kws: 'compras, procurement, licenciamiento, renovación, contratos, licitación', main: 'procurement', or: ['compras','procurement','licenciamiento','renovación','contratos'], tools: ['SAP Ariba','Coupa','Oracle Procurement','Jaggaer'], li: ['compras','procurement','licenciamiento'], impl: 'licenciamiento contratos', pain: 'procesos de compra manuales, sin catálogo, spend descontrolado' },
+  pay: { name: 'Pagos / Fintech / POS', kws: 'procesamiento de pagos, POS, fintech, pasarela de pagos, Bitcoin, QR, adquirencia', main: 'pagos', or: ['procesamiento de pagos','POS','fintech','pasarela de pagos','Bitcoin'], tools: ['Redsys','Stripe','Adyen','PayPal'], li: ['pagos','POS','fintech'], impl: 'pasarela de pagos POS', pain: 'integraciones de cobro frágiles, fraude, conciliación manual' },
+  health: { name: 'Health IT / Salud Digital', kws: 'HL7, FHIR, HIS, historia clínica, salud digital, telemedicina, interoperabilidad', main: 'historia clínica', or: ['HL7','FHIR','HIS','historia clínica','salud digital'], tools: ['Epic','Cerner','Dedalus','InterSystems'], li: ['salud digital','HIS','historia clínica'], impl: 'HL7 FHIR', pain: 'interoperabilidad, historias clínicas en silos, compliance sanitaria' },
+  mon: { name: 'Monitoreo / Observabilidad', kws: 'Zabbix, Nagios, Grafana, Prometheus, monitoreo, observabilidad, APM, Datadog', main: 'monitoreo', or: ['Zabbix','Nagios','Grafana','Prometheus','monitoreo'], tools: ['Datadog','New Relic','Dynatrace','Splunk'], li: ['observabilidad','Grafana','Datadog'], impl: 'Grafana Prometheus', pain: 'incidentes sin root cause, MTTR alto, falta de visibilidad end-to-end' },
+  api: { name: 'Integración / APIs / iPaaS', kws: 'API, MuleSoft, integración, iPaaS, middleware, ESB, microservicios, webhooks', main: 'integración', or: ['API','MuleSoft','integración','iPaaS','middleware'], tools: ['MuleSoft','Boomi','Workato','Kafka'], li: ['API','MuleSoft','integración'], impl: 'MuleSoft iPaaS', pain: 'sistemas desconectados, integraciones punto a punto, ESB legacy' },
+  log: { name: 'Logística / WMS / RFID', kws: 'WMS, TMS, RFID, supply chain, logística, trazabilidad, SGA, EWM', main: 'WMS', or: ['WMS','TMS','RFID','SGA','supply chain'], tools: ['SAP EWM','Manhattan','Oracle SCM','Blue Yonder'], li: ['WMS','supply chain','logística'], impl: 'WMS TMS', pain: 'almacenes con procesos manuales, falta de trazabilidad, roturas de stock' },
+  crm: { name: 'CRM / Customer Experience', kws: 'Salesforce, CRM, customer experience, HubSpot, Dynamics 365, service desk', main: 'CRM', or: ['Salesforce','CRM','customer experience','HubSpot','Dynamics 365'], tools: ['Salesforce','HubSpot','Dynamics 365','Zendesk'], li: ['Salesforce','CRM','HubSpot'], impl: 'Salesforce CRM', pain: 'pipeline sin visibilidad, CRM mal adoptado, datos de cliente dispersos' },
+};
+
+const COUNTRIES = {
+  ES: { name: 'España', portals: 'InfoJobs, Tecnoempleo, LinkedIn Jobs, Indeed ES', portalSites: 'site:infojobs.net, site:tecnoempleo.com, site:linkedin.com/jobs, site:es.indeed.com', press: 'Cinco Días OR Expansión OR El Economista OR ComputerWorld España' },
+  AR: { name: 'Argentina', portals: 'Bumeran, ZonaJobs, LinkedIn Jobs, Indeed AR', portalSites: 'site:bumeran.com.ar, site:zonajobs.com.ar, site:linkedin.com/jobs, site:ar.indeed.com', press: 'Cronista OR Ámbito OR Infobae OR iProfesional' },
+  MX: { name: 'México', portals: 'OCC Mundial, Computrabajo, LinkedIn Jobs, Indeed MX', portalSites: 'site:occ.com.mx, site:computrabajo.com.mx, site:linkedin.com/jobs, site:mx.indeed.com', press: 'El Financiero OR El Economista OR Expansión MX' },
+  CO: { name: 'Colombia', portals: 'Computrabajo, El Empleo, LinkedIn Jobs, Indeed CO', portalSites: 'site:computrabajo.com.co, site:elempleo.com, site:linkedin.com/jobs, site:co.indeed.com', press: 'La República OR Portafolio OR Semana' },
+  CL: { name: 'Chile', portals: 'Trabajando, Computrabajo, LinkedIn Jobs', portalSites: 'site:trabajando.cl, site:computrabajo.cl, site:linkedin.com/jobs', press: 'Diario Financiero OR La Tercera OR Pulso' },
+  PE: { name: 'Perú', portals: 'Computrabajo, Bumeran, LinkedIn Jobs', portalSites: 'site:computrabajo.com.pe, site:bumeran.com.pe, site:linkedin.com/jobs', press: 'Gestión OR El Comercio OR Semana Económica' },
+  EC: { name: 'Ecuador', portals: 'Computrabajo, Multitrabajos, LinkedIn Jobs', portalSites: 'site:computrabajo.com.ec, site:multitrabajos.com, site:linkedin.com/jobs', press: 'El Universo OR Primicias OR Gestión EC' },
+  US: { name: 'Estados Unidos', portals: 'Indeed, LinkedIn Jobs, Glassdoor, ZipRecruiter', portalSites: 'site:indeed.com, site:linkedin.com/jobs, site:glassdoor.com, site:ziprecruiter.com', press: 'WSJ OR Bloomberg OR TechCrunch OR CIO.com' },
+};
+
+const DEFAULT_PRIORITIES = ['erp', 'apps', 'ia', 'bi'];
+
+function buildDeepQueries(c, cat, press) {
+  return [
+    `"${c}" AND ("${cat.or[0]}" OR "${cat.or[1]}" OR "${cat.or[2]}" OR "${cat.or[3]}" OR "${cat.or[4]}")`,
+    `"${c}" caso de éxito ${cat.main}`,
+    `"${c}" implementación ${cat.impl}`,
+    `site:linkedin.com/in "${c}" ${cat.li[0]} OR ${cat.li[1]} OR ${cat.li[2]}`,
+    `"${c}" AND ("${cat.tools[0]}" OR "${cat.tools[1]}" OR "${cat.tools[2]}" OR "${cat.tools[3]}")`,
+    `"${c}" ${cat.main} (${press})`,
+    `"${c}" (${cat.main} OR "${cat.or[0]}") problema OR desafío OR migración OR reto`,
+  ];
+}
+
+function buildBasicQuery(c, cat) {
+  return `"${c}" AND ("${cat.or[0]}" OR "${cat.or[1]}" OR "${cat.or[2]}" OR "${cat.or[3]}" OR "${cat.or[4]}")`;
+}
+
+function generatePrompt(company, url, countryKey, priorities, customContext) {
+  const country = COUNTRIES[countryKey];
+  const today = new Date().toLocaleDateString('es-ES');
+  const secondary = Object.keys(CATS).filter(k => !priorities.includes(k));
+  const pCount = priorities.length;
+  const sCount = secondary.length;
+  const domain = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+  let out = '';
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += '  INTELIGENCIA COMERCIAL B2B — RADIOGRAFÍA PROFUNDA\n';
+  out += `  Target: ${company}\n`;
+  out += '  Ejecutor: TGV (TeGeVe — tegeve.es)\n';
+  out += '═══════════════════════════════════════════════════════════════\n\n';
+
+  out += '▌ CONTEXTO DEL EJECUTOR (TGV)\n';
+  out += '───────────────────────────────────────────────────────────────\n';
+  out += 'TeGeVe (TGV) es una consultora tecnológica con +30 años de trayectoria, con\n';
+  out += 'presencia en España, Argentina, México y USA. Servicios core:\n';
+  out += '  • Consultoría SAP (partner SAP)\n';
+  out += '  • Consultoría JD Edwards (partner Oracle/IBM)\n';
+  out += '  • IA Empresarial (agentes, RPA, automatización de procesos)\n';
+  out += '  • Desarrollo e Integración de Aplicaciones a medida\n';
+  out += '  • Modernización de legacy y desarrollo para industria financiera\n';
+  out += '  • Assessment de Valor de Negocio\n';
+  out += 'Modelo nearshore Spain↔LatAm. Target: CIOs, IT Directors, CFOs, Directores\n';
+  out += 'de Operaciones en empresas medianas-grandes.\n\n';
+
+  if (customContext && customContext.trim()) {
+    out += '▌ CONTEXTO ADICIONAL APORTADO\n';
+    out += '───────────────────────────────────────────────────────────────\n';
+    out += customContext.trim() + '\n\n';
+  }
+
+  out += '▌ OBJETIVO DE ESTA INVESTIGACIÓN\n';
+  out += '───────────────────────────────────────────────────────────────\n';
+  out += `Generar inteligencia comercial accionable sobre ${company} para:\n`;
+  out += '  1. Entender su contexto estratégico y momento de negocio\n';
+  out += '  2. Mapear su stack tecnológico actual con evidencia pública\n';
+  out += '  3. Detectar señales de dolor y señales de compra activas\n';
+  out += '  4. Identificar decision makers clave con quién contactar\n';
+  out += '  5. Formular 3 hipótesis de desafío + ángulo comercial TGV\n';
+  out += '  6. Redactar un email de primer contacto personalizado y accionable\n\n';
+
+  out += '▌ DATOS DEL TARGET\n';
+  out += '───────────────────────────────────────────────────────────────\n';
+  out += `  EMPRESA : ${company}\n`;
+  out += `  WEB     : ${url}\n`;
+  out += `  PAÍS    : ${country.name}\n`;
+  out += `  FECHA   : ${today}\n\n`;
+
+  out += '▌ INSTRUCCIONES GENERALES DE EJECUCIÓN\n';
+  out += '───────────────────────────────────────────────────────────────\n';
+  out += 'Ejecutá este trabajo en 6 fases secuenciales. Para cada hallazgo usá\n';
+  out += 'web_search con las queries sugeridas (adaptá si no dan resultados) y\n';
+  out += 'web_fetch cuando el snippet no sea suficiente.\n\n';
+  out += 'REGLAS NO NEGOCIABLES:\n';
+  out += '  ✓ Cada afirmación DEBE llevar URL real del resultado de búsqueda\n';
+  out += '  ✗ NO inventes URLs. Solo URLs que aparezcan en resultados reales\n';
+  out += '  ✓ Si no hay evidencia, escribilo: "Sin evidencia pública"\n';
+  out += '  ✓ Marcá "convergente" cuando un dato aparezca en 2+ fuentes\n';
+  out += '  ✓ Priorizá fuentes primarias (empresa, proveedor, comunicado oficial)\n';
+  out += '  ✓ Incluí fecha de publicación cuando esté disponible\n';
+  out += '  ✗ No asumas usos ni tecnologías sin evidencia directa\n\n';
+
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += '  FASE 1 — CONTEXTO ESTRATÉGICO Y MOMENTUM\n';
+  out += '═══════════════════════════════════════════════════════════════\n\n';
+  out += 'Antes de tocar tecnología, establecé con evidencia:\n';
+  out += '  • Sector, subsegmento, tamaño (empleados, facturación, sedes)\n';
+  out += '  • Presencia geográfica y mercados principales\n';
+  out += '  • Estructura societaria (grupo matriz, filiales, private equity)\n';
+  out += '  • Momento de negocio: crecimiento, M&A, IPO, reestructuración, dificultades\n';
+  out += '  • Prioridades estratégicas públicas (últimos 12-18 meses)\n';
+  out += '  • 2-3 competidores directos y posicionamiento\n';
+  out += '  • Regulación aplicable (NIS2, DORA, sectorial) si relevante\n\n';
+  out += 'Queries sugeridas:\n';
+  out += `  • "${company}" facturación empleados sede\n`;
+  out += `  • "${company}" estrategia 2025 plan transformación\n`;
+  out += `  • "${company}" adquisición fusión inversión\n`;
+  out += `  • "${company}" competidores mercado sector\n`;
+  out += `  • site:${domain} quienes somos\n`;
+  out += `  • "${company}" (${country.press})\n\n`;
+
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += `  FASE 2 — RADIOGRAFÍA TECNOLÓGICA (${pCount} áreas priorizadas + ${sCount} secundarias)\n`;
+  out += '═══════════════════════════════════════════════════════════════\n\n';
+  out += 'Para cada área, extraé no solo "qué tecnología usa" sino también:\n';
+  out += '  → Antigüedad estimada del stack (legacy vs moderno)\n';
+  out += '  → Partner/consultora implementadora (si es visible)\n';
+  out += '  → Señales de limitación o fricción (migraciones en curso,\n';
+  out += '    vacantes repetidas, incidentes públicos, quejas en foros)\n';
+  out += '  → Gap vs mejores prácticas del sector\n\n';
+
+  priorities.forEach((key, i) => {
+    const cat = CATS[key];
+    out += `─── MICRO-AGENTE #${i + 1}: ${cat.name}  ⚡ PRIORITARIO ───\n`;
+    out += `Keywords: ${cat.kws}\n`;
+    out += `Dolores típicos a buscar: ${cat.pain}\n`;
+    out += 'Profundidad: PROFUNDA (7 queries, cruzar fuentes)\n';
+    out += 'Queries sugeridas para web_search:\n';
+    buildDeepQueries(company, cat, country.press).forEach(q => {
+      out += `  • ${q}\n`;
+    });
+    out += '\n';
+  });
+
+  secondary.forEach((key, i) => {
+    const cat = CATS[key];
+    out += `─── MICRO-AGENTE #${pCount + i + 1}: ${cat.name}  [ESTÁNDAR] ───\n`;
+    out += `Keywords: ${cat.kws}\n`;
+    out += 'Profundidad: BÁSICA (1 query de rastreo)\n';
+    out += `  • ${buildBasicQuery(company, cat)}\n\n`;
+  });
+
+  out += '─── AUXILIAR: Stack web pública (BuiltWith-style) ───\n';
+  out += `  • builtwith ${domain}\n`;
+  out += `  • wappalyzer ${domain}\n`;
+  out += `  • "${company}" tecnología web frontend\n`;
+  out += `  Analizar: ${url} — HTML source, JS, headers, subdominios, CMS\n\n`;
+
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += '  FASE 3 — SEÑALES DE COMPRA Y TRIGGERS\n';
+  out += '═══════════════════════════════════════════════════════════════\n\n';
+  out += 'Buscá evidencia de que la empresa está "en movimiento" tecnológico.\n';
+  out += 'Las señales más potentes son:\n\n';
+  out += '  ► VACANTES IT RECIENTES (últimos 3-6 meses)\n';
+  out += '    Qué skills piden = qué tecnología tienen o están adoptando.\n';
+  out += '    Vacantes repetidas = dolor persistente.\n';
+  out += `    • "${company}" vacante tecnología ${country.portalSites}\n`;
+  out += `    • "${company}" hiring IT site:linkedin.com/jobs\n`;
+  out += `    • site:${domain} carreras empleo tecnología\n\n`;
+  out += '  ► MEMORIAS / REPORTES CORPORATIVOS (últimos 2 años)\n';
+  out += '    Inversiones tech declaradas, roadmap digital, sostenibilidad tech.\n';
+  out += `    • "${company}" ("memoria integrada" OR "informe sostenibilidad" OR "cuentas anuales")\n`;
+  out += `    • "${company}" transformación digital inversión tecnología 2024 2025\n`;
+  out += `    • site:${domain} reporte sostenibilidad tecnología\n\n`;
+  out += '  ► CAMBIOS DIRECTIVOS (nuevo CIO/CTO/CDO = ventana de 90 días)\n';
+  out += `    • "${company}" nombramiento CIO CTO CDO director tecnología\n`;
+  out += `    • "${company}" new CIO CTO appointment 2025 2026\n\n`;
+  out += '  ► NOTICIAS Y PROYECTOS PÚBLICOS\n';
+  out += `    • "${company}" (implementará OR migrará OR modernizará OR seleccionará) 2025\n`;
+  out += `    • "${company}" RFP licitación tecnología\n`;
+  out += `    • "${company}" ransomware ciberataque incidente\n`;
+  out += `    • "${company}" NIS2 DORA compliance\n\n`;
+
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += '  FASE 4 — DECISION MAKERS Y MAPA DE PODER IT\n';
+  out += '═══════════════════════════════════════════════════════════════\n\n';
+  out += 'Identificá con nombre, cargo exacto y URL de LinkedIn verificable:\n';
+  out += '  • CIO / IT Director / Director de Sistemas\n';
+  out += '  • CTO / Director de Arquitectura\n';
+  out += '  • CDO / Director de Transformación Digital\n';
+  out += '  • CISO / Responsable de Ciberseguridad\n';
+  out += '  • CFO (clave en decisiones SAP/ERP)\n';
+  out += '  • COO / Director de Operaciones (si hay dolor logístico/producción)\n';
+  out += '  • Responsables de compra IT / Procurement\n\n';
+  out += 'Queries:\n';
+  out += `  • site:linkedin.com/in "${company}" (CIO OR CTO OR "Director de Sistemas" OR "Director de Tecnología")\n`;
+  out += `  • site:linkedin.com/in "${company}" (CISO OR CDO OR "Transformación Digital")\n`;
+  out += `  • site:linkedin.com/in "${company}" arquitecto SAP Oracle\n`;
+  out += `  • "${company}" organigrama dirección tecnología\n\n`;
+  out += 'Para cada persona identificada, anotá:\n';
+  out += '  → Nombre + cargo exacto + URL LinkedIn\n';
+  out += '  → Antigüedad en el puesto (señal de ventana de compra)\n';
+  out += '  → Posts/actividad pública reciente que revele prioridades\n';
+  out += '  → Consultora de origen si es ex-Big4 (abre/cierra puertas)\n\n';
+
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += '  FASE 5 — HIPÓTESIS DE DOLOR + ÁNGULO COMERCIAL TGV\n';
+  out += '═══════════════════════════════════════════════════════════════\n\n';
+  out += 'Sintetizá todo lo anterior en un análisis accionable:\n\n';
+  out += 'A) TOP 3 DESAFÍOS PROBABLES DE LA EMPRESA\n';
+  out += '   Para cada uno documentá:\n';
+  out += '     - Descripción del desafío (1-2 líneas)\n';
+  out += '     - Evidencia que lo sustenta (con URL)\n';
+  out += '     - Severidad estimada (alta/media/baja) y justificación\n';
+  out += '     - Impacto de negocio (financiero, operativo, regulatorio, reputacional)\n\n';
+  out += 'B) MAPEO DESAFÍO → SERVICIO TGV\n';
+  out += '   Para cada desafío, indicá:\n';
+  out += '     - Qué servicio TGV lo resuelve (SAP, JDE, IA, Desarrollo, Assessment)\n';
+  out += '     - Por qué TGV vs Big4 (diferencial nearshore, experiencia sectorial)\n';
+  out += '     - Referencia de caso análogo si aplica (pharma, finance, retail, etc.)\n\n';
+  out += 'C) ÁNGULO DE ATAQUE RECOMENDADO\n';
+  out += '   - ¿Cuál de los 3 desafíos es el mejor punto de entrada?\n';
+  out += '   - Timing: ¿por qué ahora y no en 6 meses?\n';
+  out += '   - Decision maker prioritario a contactar primero\n';
+  out += '   - Canal recomendado: email, LinkedIn, intro común\n\n';
+
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += '  FASE 6 — OUTPUT ACCIONABLE\n';
+  out += '═══════════════════════════════════════════════════════════════\n\n';
+  out += 'Entregá los siguientes artefactos en este orden:\n\n';
+
+  out += '┌─ 1. DOSSIER EJECUTIVO (1 página, formato markdown) ──────────┐\n';
+  out += '│  • Snapshot: sector, tamaño, momentum                        │\n';
+  out += '│  • Stack tecnológico resumido (áreas clave)                  │\n';
+  out += '│  • Top 3 desafíos con severidad                              │\n';
+  out += '│  • Decision maker prioritario                                │\n';
+  out += '│  • Ángulo de ataque recomendado                              │\n';
+  out += '└──────────────────────────────────────────────────────────────┘\n\n';
+
+  out += '┌─ 2. TABLA CONSOLIDADA TECNOLÓGICA ───────────────────────────┐\n';
+  out += '│  | Área | Tecnología | Partner | Antigüedad | Desafío |      │\n';
+  out += '│  | Servicio TGV aplicable | Fuente URL |                     │\n';
+  out += '└──────────────────────────────────────────────────────────────┘\n\n';
+
+  out += '┌─ 3. EMAIL COMERCIAL DE PRIMER CONTACTO ──────────────────────┐\n';
+  out += '│  Requisitos del email:                                       │\n';
+  out += '│    - Asunto máx 50 caracteres, que provoque apertura         │\n';
+  out += '│    - Apertura con dato específico verificable del target     │\n';
+  out += '│      (NO elogio genérico, NO "vi que sois líderes en...")    │\n';
+  out += '│    - Hipótesis del desafío en tono humilde, no asertivo      │\n';
+  out += '│      ("imagino que / es probable que")                       │\n';
+  out += '│    - Valor específico que TGV aporta (concreto, no genérico) │\n';
+  out += '│    - CTA de baja fricción (NO "llamada sin compromiso")      │\n';
+  out += '│    - Dejar placeholder de firma: [Nombre, cargo, email]      │\n';
+  out += '│    - Máximo 120 palabras de cuerpo                           │\n';
+  out += '│    - Tono: consultor senior, NO vendedor                     │\n';
+  out += '│    - Castellano de España neutro, sin argentinismos          │\n';
+  out += '│  Entregá 2 variantes con ángulos distintos (elegir A/B test) │\n';
+  out += '└──────────────────────────────────────────────────────────────┘\n\n';
+
+  out += '┌─ 4. MENSAJE LINKEDIN (alternativa al email) ─────────────────┐\n';
+  out += '│  Mismo ángulo pero adaptado a connection note (300 caracteres)│\n';
+  out += '│  O InMail largo (máx 200 palabras) si es Premium             │\n';
+  out += '└──────────────────────────────────────────────────────────────┘\n\n';
+
+  out += '┌─ 5. PREGUNTAS PARA DISCOVERY CALL ───────────────────────────┐\n';
+  out += '│  5 preguntas estratégicas (NO técnicas) que validen la       │\n';
+  out += '│  hipótesis de dolor y abran al prospect a conversación real. │\n';
+  out += '└──────────────────────────────────────────────────────────────┘\n\n';
+
+  out += '┌─ 6. ÁREAS SIN EVIDENCIA = OPORTUNIDADES DE DISCOVERY ────────┐\n';
+  out += '│  Listá los micro-agentes que no arrojaron evidencia pública. │\n';
+  out += '│  Son preguntas abiertas para formular en la conversación.    │\n';
+  out += '└──────────────────────────────────────────────────────────────┘\n\n';
+
+  out += '┌─ 7. LIMITACIONES Y CAVEATS ──────────────────────────────────┐\n';
+  out += '│  Declará honestamente qué no se pudo verificar y qué se      │\n';
+  out += '│  asume. Esto protege la credibilidad de la pieza.            │\n';
+  out += '└──────────────────────────────────────────────────────────────┘\n\n';
+
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += '  CHECKLIST FINAL ANTES DE ENTREGAR\n';
+  out += '═══════════════════════════════════════════════════════════════\n';
+  out += '  □ ¿Cada afirmación tiene URL verificable?\n';
+  out += '  □ ¿Los 3 desafíos están priorizados por severidad × match-TGV?\n';
+  out += '  □ ¿El email referencia datos específicos del target?\n';
+  out += '  □ ¿Hay una única acción clara solicitada al prospect?\n';
+  out += '  □ ¿Se evitaron clichés ("transformación digital", "sinergias")?\n';
+  out += '  □ ¿Se declararon las limitaciones del análisis?\n';
+
+  return out;
+}
+
+function App() {
+  const [company, setCompany] = useState('Mahou');
+  const [url, setUrl] = useState('https://www.mahou.es/');
+  const [country, setCountry] = useState('ES');
+  const [priorities, setPriorities] = useState(DEFAULT_PRIORITIES);
+  const [customContext, setCustomContext] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [dragIdx, setDragIdx] = useState(null);
+
+  const available = Object.keys(CATS).filter(k => !priorities.includes(k));
+
+  const movePrio = (idx, dir) => {
+    const next = [...priorities];
+    const j = idx + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setPriorities(next);
+  };
+
+  const removePrio = (idx) => setPriorities(priorities.filter((_, i) => i !== idx));
+  const addPrio = (key) => setPriorities([...priorities, key]);
+
+  const prompt = useMemo(
+    () => generatePrompt(company || '[empresa]', url || '[url]', country, priorities, customContext),
+    [company, url, country, priorities, customContext]
+  );
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = prompt;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const downloadTxt = () => {
+    const blob = new Blob([prompt], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `tgv-intel-${(company || 'empresa').toLowerCase().replace(/\s+/g, '-')}.txt`;
+    a.click();
+  };
+
+  const onDragStart = (idx) => setDragIdx(idx);
+  const onDragOver = (e) => e.preventDefault();
+  const onDrop = (idx) => {
+    if (dragIdx === null || dragIdx === idx) return;
+    const next = [...priorities];
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(idx, 0, moved);
+    setPriorities(next);
+    setDragIdx(null);
+  };
+
+  return h('div', { className: 'min-h-screen', style: { backgroundColor: TGV.bg } }, [
+    // Top bar
+    h('div', { key: 'topbar', className: 'w-full', style: { backgroundColor: TGV.primary } },
+      h('div', { className: 'max-w-5xl mx-auto px-4 md:px-6 py-4 flex items-center gap-3' }, [
+        h('div', { key: 'icon', className: 'p-2 rounded-md', style: { backgroundColor: TGV.highlight } },
+          h(Target, { size: 20, color: 'white' })),
+        h('div', { key: 'title', className: 'flex-1' }, [
+          h('h1', { key: 't', className: 'text-white text-lg font-bold tracking-tight' }, 'TGV Intel — Tech Radar Builder'),
+          h('p', { key: 's', className: 'text-xs', style: { color: '#94B3D1' } }, 'Inteligencia comercial B2B para prospección consultiva'),
+        ]),
+        h('span', { key: 'v', className: 'hidden md:inline-block text-xs px-2 py-1 rounded', style: { color: TGV.primary, backgroundColor: '#CBD5E1' } }, 'v2.0'),
+      ])),
+
+    h('div', { key: 'main', className: 'max-w-5xl mx-auto px-4 md:px-6 py-6' }, [
+      // Datos target
+      h('section', { key: 'datos', className: 'rounded-xl border p-5 mb-4', style: { backgroundColor: TGV.card, borderColor: TGV.border } }, [
+        h('h2', { key: 'h', className: 'flex items-center gap-2 text-sm font-bold mb-4', style: { color: TGV.textPrimary } }, [
+          h(Building2, { key: 'i', size: 16, style: { color: TGV.accent } }),
+          ' Datos del target'
+        ]),
+        h('div', { key: 'grid', className: 'grid md:grid-cols-2 gap-4' }, [
+          h('div', { key: 'c1' }, [
+            h('label', { key: 'l', className: 'block text-xs font-semibold mb-1.5', style: { color: TGV.textSecondary } }, 'Nombre de la organización'),
+            h('input', { key: 'i', type: 'text', value: company, onChange: (e) => setCompany(e.target.value),
+              className: 'w-full px-3 py-2 rounded-md text-sm outline-none',
+              style: { backgroundColor: TGV.bg, border: `1px solid ${TGV.border}`, color: TGV.textPrimary },
+              onFocus: (e) => e.target.style.borderColor = TGV.highlight,
+              onBlur: (e) => e.target.style.borderColor = TGV.border,
+              placeholder: 'Ej: Mahou' }),
+          ]),
+          h('div', { key: 'c2' }, [
+            h('label', { key: 'l', className: 'flex items-center gap-1 text-xs font-semibold mb-1.5', style: { color: TGV.textSecondary } }, [
+              h(Link2, { key: 'i', size: 12 }), ' URL corporativa'
+            ]),
+            h('input', { key: 'i', type: 'text', value: url, onChange: (e) => setUrl(e.target.value),
+              className: 'w-full px-3 py-2 rounded-md text-sm outline-none',
+              style: { backgroundColor: TGV.bg, border: `1px solid ${TGV.border}`, color: TGV.textPrimary },
+              onFocus: (e) => e.target.style.borderColor = TGV.highlight,
+              onBlur: (e) => e.target.style.borderColor = TGV.border,
+              placeholder: 'https://...' }),
+          ]),
+          h('div', { key: 'c3', className: 'md:col-span-2' }, [
+            h('label', { key: 'l', className: 'flex items-center gap-1 text-xs font-semibold mb-1.5', style: { color: TGV.textSecondary } }, [
+              h(Globe, { key: 'i', size: 12 }), ' País principal'
+            ]),
+            h('select', { key: 's', value: country, onChange: (e) => setCountry(e.target.value),
+              className: 'w-full px-3 py-2 rounded-md text-sm outline-none',
+              style: { backgroundColor: TGV.bg, border: `1px solid ${TGV.border}`, color: TGV.textPrimary } },
+              Object.entries(COUNTRIES).map(([k, v]) => h('option', { key: k, value: k }, v.name))),
+            h('p', { key: 'p', className: 'text-xs mt-1.5', style: { color: TGV.textMuted } }, `Portales: ${COUNTRIES[country].portals}`),
+          ]),
+        ]),
+        h('div', { key: 'ctx', className: 'mt-4' }, [
+          h('label', { key: 'l', className: 'block text-xs font-semibold mb-1.5', style: { color: TGV.textSecondary } },
+            'Contexto adicional (opcional) — brief, relación previa, angle específico'),
+          h('textarea', { key: 't', value: customContext, onChange: (e) => setCustomContext(e.target.value), rows: 2,
+            className: 'w-full px-3 py-2 rounded-md text-sm outline-none resize-y',
+            style: { backgroundColor: TGV.bg, border: `1px solid ${TGV.border}`, color: TGV.textPrimary },
+            placeholder: 'Ej: Contacto referido por X. Acaban de abrir fábrica en Toledo. Queremos abrirles con JDE WMS...' }),
+        ]),
+      ]),
+
+      // Prioridades
+      h('section', { key: 'prio', className: 'rounded-xl border p-5 mb-4', style: { backgroundColor: TGV.card, borderColor: TGV.border } }, [
+        h('label', { key: 'l', className: 'block text-sm font-bold mb-1', style: { color: TGV.textPrimary } }, [
+          'Prioridades de propuesta de valor ',
+          h('span', { key: 's', className: 'text-xs font-normal', style: { color: TGV.textMuted } }, '(orden = relevancia)')
+        ]),
+        h('p', { key: 'desc', className: 'text-xs mb-3', style: { color: TGV.textMuted } },
+          'Las áreas priorizadas reciben 7 queries profundas + búsqueda de dolores específicos. Las demás, 1 query de rastreo.'),
+        h('div', { key: 'list', className: 'space-y-2 mb-4' },
+          priorities.length === 0
+            ? h('div', { className: 'text-center py-6 text-sm rounded-lg', style: { color: TGV.textMuted, border: `2px dashed ${TGV.border}` } },
+                'Agregá al menos una categoría prioritaria desde abajo')
+            : priorities.map((key, idx) =>
+                h('div', { key, draggable: true,
+                  onDragStart: () => onDragStart(idx),
+                  onDragOver,
+                  onDrop: () => onDrop(idx),
+                  className: `flex items-center gap-2 rounded-lg px-3 py-2.5 transition ${dragIdx === idx ? 'opacity-50' : ''}`,
+                  style: { backgroundColor: TGV.card, border: `1px solid ${TGV.border}` } }, [
+                  h(GripVertical, { key: 'g', size: 16, className: 'cursor-move flex-shrink-0', style: { color: TGV.textMuted } }),
+                  h('span', { key: 'n', className: 'font-bold text-sm w-8 flex-shrink-0', style: { color: TGV.highlight } }, `#${idx + 1}`),
+                  h('span', { key: 't', className: 'text-sm flex-1', style: { color: TGV.textPrimary } }, CATS[key].name),
+                  h('button', { key: 'u', onClick: () => movePrio(idx, -1), disabled: idx === 0,
+                    className: 'p-1 rounded disabled:opacity-30',
+                    style: { color: TGV.textSecondary } },
+                    h(ChevronUp, { size: 16 })),
+                  h('button', { key: 'd', onClick: () => movePrio(idx, 1), disabled: idx === priorities.length - 1,
+                    className: 'p-1 rounded disabled:opacity-30',
+                    style: { color: TGV.textSecondary } },
+                    h(ChevronDown, { size: 16 })),
+                  h('button', { key: 'x', onClick: () => removePrio(idx),
+                    className: 'p-1 rounded',
+                    style: { color: TGV.textSecondary },
+                    onMouseEnter: (e) => { e.currentTarget.style.backgroundColor = '#FEE2E2'; e.currentTarget.style.color = '#DC2626'; },
+                    onMouseLeave: (e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = TGV.textSecondary; } },
+                    h(X, { size: 16 })),
+                ]))),
+        available.length > 0 && h('div', { key: 'avail', className: 'flex flex-wrap gap-2' },
+          available.map(key =>
+            h('button', { key, onClick: () => addPrio(key),
+              className: 'inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition',
+              style: { backgroundColor: TGV.bg, color: TGV.textSecondary, border: `1px solid ${TGV.border}` },
+              onMouseEnter: (e) => { e.currentTarget.style.backgroundColor = TGV.highlightSoft; e.currentTarget.style.color = TGV.primary; e.currentTarget.style.borderColor = TGV.highlight; },
+              onMouseLeave: (e) => { e.currentTarget.style.backgroundColor = TGV.bg; e.currentTarget.style.color = TGV.textSecondary; e.currentTarget.style.borderColor = TGV.border; } }, [
+              h(Plus, { key: 'p', size: 12 }),
+              ' ', CATS[key].name
+            ]))),
+      ]),
+
+      // Acciones
+      h('section', { key: 'act', className: 'rounded-xl border p-5 mb-4', style: { backgroundColor: TGV.card, borderColor: TGV.border } }, [
+        h('div', { key: 'btns', className: 'flex flex-wrap gap-2 mb-4' }, [
+          h('button', { key: 'copy', onClick: copyToClipboard,
+            className: 'inline-flex items-center gap-2 text-white text-sm font-semibold px-4 py-2 rounded-md transition',
+            style: { backgroundColor: copied ? TGV.success : TGV.accent } },
+            copied ? [h(Check, { key: 'i', size: 16 }), ' Copiado'] : [h(Copy, { key: 'i', size: 16 }), ' Copiar prompt']),
+          h('button', { key: 'dl', onClick: downloadTxt,
+            className: 'inline-flex items-center gap-2 text-white text-sm font-semibold px-4 py-2 rounded-md transition',
+            style: { backgroundColor: TGV.primary } }, [
+            h(FileText, { key: 'i', size: 16 }), ' Descargar .txt'
+          ]),
+          h('button', { key: 'prev', onClick: () => setShowPreview(!showPreview),
+            className: 'inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-md transition ml-auto',
+            style: { backgroundColor: TGV.bg, color: TGV.textSecondary, border: `1px solid ${TGV.border}` } },
+            `${showPreview ? 'Ocultar' : 'Ver'} preview`),
+        ]),
+        h('div', { key: 'stats', className: 'flex flex-wrap gap-4 text-xs', style: { color: TGV.textMuted } }, [
+          h('span', { key: 's1' }, [h('b', { style: { color: TGV.highlight } }, '●'), ` ${priorities.length} áreas priorizadas × 7 queries`]),
+          h('span', { key: 's2' }, [h('b', { style: { color: TGV.accent } }, '●'), ` ${Object.keys(CATS).length - priorities.length} secundarias × 1 query`]),
+          h('span', { key: 's3' }, [h('b', { style: { color: TGV.primary } }, '●'), ' 6 fases · dossier · email']),
+          h('span', { key: 's4' }, `${prompt.length.toLocaleString('es-ES')} caracteres`),
+        ]),
+      ]),
+
+      // Preview
+      showPreview && h('section', { key: 'preview', className: 'rounded-xl p-5 mb-4 overflow-hidden fade-in', style: { backgroundColor: TGV.primary } }, [
+        h('div', { key: 'lbl', className: 'text-xs mb-2', style: { color: TGV.highlight, fontFamily: 'monospace' } }, '▶ PREVIEW'),
+        h('pre', { key: 'p', className: 'text-xs overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto leading-relaxed', style: { color: '#E2E8F0' } }, prompt),
+      ]),
+
+      h('p', { key: 'foot', className: 'text-xs text-center mt-4', style: { color: TGV.textMuted } }, [
+        'TGV Intel · Pegá el prompt en Claude / GPT con web_search · ',
+        h('a', { key: 'a', href: 'https://www.tegeve.es', target: '_blank', rel: 'noopener', style: { color: TGV.accent } }, 'tegeve.es')
+      ]),
+    ]),
+  ]);
+}
+
+createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
