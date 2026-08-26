@@ -2,6 +2,12 @@
 # (sintaxis tipo .gitignore). El sitio público vive en la raíz:
 # index.html, assets/, casos/, contacto/, nosotros/, servicios/,
 # sitemap.xml, robots.txt, llms.txt, og.png — esos SÍ se sirven.
+#
+# IMPORTANTE: esto —y NO .gitignore— es lo único que decide qué sube
+# `wrangler deploy` como asset público. Un fichero ignorado por git se
+# sube igual si no está aquí.
+
+# --- Código del Worker y configuración ---
 worker/
 worker-site/
 wrangler.jsonc
@@ -10,6 +16,20 @@ wrangler.jsonc
 .github/
 .claude/
 .git/
+
+# --- Secretos y estado local (NUNCA públicos) ---
+# .dev.vars contiene AGENT_ADMIN_KEY (clave del panel de leads).
+.dev.vars
+.dev.vars.*
+# Estado local de wrangler/miniflare: KV con leads de prueba, caché
+# y wrangler-account.json con los datos de la cuenta.
+.wrangler/
+node_modules/
+
+# --- Utillaje interno de CI (no es parte del sitio) ---
+agent-kit/
+
+# --- Documentación y artefactos de desarrollo ---
 *.md
 *.map
 .DS_Store
