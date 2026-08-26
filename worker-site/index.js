@@ -2031,8 +2031,15 @@ async function handleMarkdown(request, env, ctx) {
   // Caché de borde: la conversión se paga una vez por PoP. Es una
   // optimización, nunca un punto de fallo: si la caché no está
   // disponible o falla, se convierte igual.
+  // La clave DEBE distinguir las dos variantes: la URL .md lleva
+  // X-Robots-Tag: noindex y la negociada por Accept no. Con una clave
+  // común, la primera en cachearse contamina a la otra (y la URL
+  // canónica podría acabar sirviéndose como noindex).
   let cache = null;
-  const cacheKey = new Request(canonicalUrl + "?__md=1", { method: "GET" });
+  const cacheKey = new Request(
+    canonicalUrl + (explicit ? "?__md=file" : "?__md=accept"),
+    { method: "GET" }
+  );
   try {
     cache = caches.default;
     const hit = await cache.match(cacheKey);
