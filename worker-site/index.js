@@ -1860,6 +1860,213 @@ ${cards || '<p class="empty">Aún no hay conversaciones guardadas.</p>'}
   return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
+
+/* ====================================================================
+   MARKDOWN PARA AGENTES — negociación de contenido
+   ====================================================================
+   Un agente que pide `Accept: text/markdown` (o que abre la URL con
+   sufijo .md) recibe la misma página en Markdown limpio: frontmatter
+   YAML + cuerpo + el JSON-LD íntegro. El navegador sigue recibiendo
+   HTML sin coste añadido. Se implementa aquí porque «Markdown for
+   Agents» de Cloudflare exige plan Pro/Business y este sitio va en el
+   gratuito. Coste medido: ~1,2 ms de CPU en caliente, 4,2 ms en frío.
+   ==================================================================== */
+
+function decodeEntities(s) {
+  return s
+    .replace(/&nbsp;/g, " ")
+    .replace(/&mdash;/g, "—").replace(/&ndash;/g, "–")
+    .replace(/&hellip;/g, "…")
+    .replace(/&laquo;/g, "«").replace(/&raquo;/g, "»")
+    .replace(/&ldquo;/g, "“").replace(/&rdquo;/g, "”")
+    .replace(/&aacute;/g, "á").replace(/&eacute;/g, "é")
+    .replace(/&iacute;/g, "í").replace(/&oacute;/g, "ó")
+    .replace(/&uacute;/g, "ú").replace(/&ntilde;/g, "ñ")
+    .replace(/&Aacute;/g, "Á").replace(/&Eacute;/g, "É")
+    .replace(/&Iacute;/g, "Í").replace(/&Oacute;/g, "Ó")
+    .replace(/&Uacute;/g, "Ú").replace(/&Ntilde;/g, "Ñ")
+    .replace(/&uuml;/g, "ü").replace(/&Uuml;/g, "Ü")
+    .replace(/&iquest;/g, "¿").replace(/&iexcl;/g, "¡")
+    .replace(/&deg;/g, "°").replace(/&euro;/g, "€")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function stripTags(s) { return s.replace(/<[^>]*>/g, ""); }
+
+function absUrl(href, base) {
+  try { return new URL(href, base).toString(); } catch (_) { return href; }
+}
+
+function inline(s, base) {
+  return s
+    .replace(/<a\b[^>]*?href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, txt) => {
+      const t = stripTags(txt).replace(/\s+/g, " ").trim();
+      if (!t) return "";
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return t;
+      // Absolutas: el agente lee el Markdown fuera del contexto de la página.
+      return "[" + t + "](" + absUrl(href, base) + ")";
+    })
+    .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_, __, t) => {
+      const x = stripTags(t).replace(/\s+/g, " ").trim(); return x ? "**" + x + "**" : "";
+    })
+    .replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_, __, t) => {
+      const x = stripTags(t).replace(/\s+/g, " ").trim(); return x ? "*" + x + "*" : "";
+    })
+    .replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_, t) => {
+      const x = stripTags(t).trim(); return x ? "`" + x + "`" : "";
+    });
+}
+
+function yamlStr(v) { return '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"'; }
+
+function htmlToMarkdown(html, pageUrl) {
+  const pick = (re) => { const m = html.match(re); return m ? decodeEntities(m[1]).replace(/\s+/g, " ").trim() : ""; };
+  const title = pick(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const description = pick(/<meta\s+name=["']description["'][^>]*\scontent=["']([\s\S]*?)["']/i);
+  const canonical = pick(/<link\s+rel=["']canonical["'][^>]*\shref=["']([^"']+)["']/i);
+  const lang = pick(/<html[^>]*\blang=["']([^"']+)["']/i) || "es";
+
+  // JSON-LD íntegro: es lo más valioso que puede leer un agente.
+  const jsonld = [];
+  const ldRe = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = ldRe.exec(html))) {
+    let raw = m[1].trim();
+    try { raw = JSON.stringify(JSON.parse(raw), null, 2); } catch (_) { /* se deja tal cual */ }
+    jsonld.push(raw);
+  }
+
+  const base = canonical || pageUrl;
+
+  let body = html;
+  const bm = body.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  if (bm) body = bm[1];
+
+  body = body
+    .replace(/<!--[\s\S]*?-->/g, "")
+    // Enlace de salto y adornos: ruido puro para un agente.
+    .replace(/<a\b[^>]*class=["'][^"']*\bskip\b[^"']*["'][\s\S]*?<\/a>/gi, "")
+    // Chips contiguos (<span>A</span><span>B</span>) → separados, no pegados.
+    .replace(/<\/span>\s*<span\b/gi, "</span> · <span")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, "")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+    .replace(/<template[\s\S]*?<\/template>/gi, "")
+    .replace(/<nav\b[\s\S]*?<\/nav>/gi, "")
+    .replace(/<footer\b[\s\S]*?<\/footer>/gi, "")
+    .replace(/<form\b[\s\S]*?<\/form>/gi, "")
+    .replace(/<button\b[\s\S]*?<\/button>/gi, "")
+    .replace(/<(input|select|textarea|img|source|iframe|link|meta)\b[^>]*>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<hr\s*\/?>/gi, "\n\n---\n\n");
+
+  body = body.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi,
+    (_, lvl, inner) => "\n\n" + "#".repeat(Number(lvl)) + " " +
+      stripTags(inline(inner, base)).replace(/\s+/g, " ").trim() + "\n\n");
+
+  body = body.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi,
+    (_, inner) => "\n- " + inline(inner, base).replace(/\s+/g, " ").trim());
+  body = body.replace(/<\/(ul|ol)>/gi, "\n\n");
+
+  body = body.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi,
+    (_, inner) => "\n\n> " + stripTags(inline(inner, base)).replace(/\s+/g, " ").trim() + "\n\n");
+
+  body = body.replace(/<\/(p|div|section|article|header|dd|dt|dl|figure|figcaption|td|th|tr|table|main|aside)>/gi, "\n\n");
+
+  body = inline(body, base);
+  let md = decodeEntities(stripTags(body));
+  md = md.replace(/\r/g, "")
+         .replace(/[ \t ]+/g, " ")
+         .replace(/ *\n */g, "\n")
+         .replace(/\n{3,}/g, "\n\n")
+         // Glifos decorativos que quedan solos en su línea: se convierten
+         // en viñeta del texto que encabezan, o se eliminan.
+         .replace(/^[✓✔→▸•]\s*\n(?=\S)/gm, "- ")
+         .replace(/^[✓✔→▸•]\s*$/gm, "")
+         .replace(/\n{3,}/g, "\n\n")
+         .trim();
+
+  const fm = ["---",
+    "title: " + yamlStr(title),
+    description ? "description: " + yamlStr(description) : null,
+    "url: " + yamlStr(canonical || pageUrl),
+    "lang: " + yamlStr(lang),
+    "---"].filter(Boolean).join("\n");
+
+  let out = fm + "\n\n" + md;
+  if (jsonld.length) {
+    out += "\n\n## Datos estructurados (JSON-LD)\n\n" +
+      jsonld.map((j) => "```json\n" + j + "\n```").join("\n\n");
+  }
+  return out + "\n";
+}
+
+function wantsMarkdown(request) {
+  // Los navegadores nunca piden text/markdown; los agentes sí.
+  return /\btext\/markdown\b/i.test(request.headers.get("Accept") || "");
+}
+
+// /index.md -> /   |   /servicios/sap/index.md -> /servicios/sap/
+// /servicios/sap.md -> /servicios/sap/
+function mdPathToHtml(pathname) {
+  if (!pathname.endsWith(".md")) return null;
+  if (pathname.endsWith("/index.md")) return pathname.slice(0, -"index.md".length);
+  return pathname.slice(0, -3) + "/";
+}
+
+async function handleMarkdown(request, env, ctx) {
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  const url = new URL(request.url);
+  const fromSuffix = mdPathToHtml(url.pathname);
+  const explicit = fromSuffix !== null;
+  if (!explicit && !wantsMarkdown(request)) return null;
+
+  const canonicalUrl = new URL(explicit ? fromSuffix : url.pathname, url.origin).toString();
+
+  // Caché de borde: la conversión se paga una vez por PoP. Es una
+  // optimización, nunca un punto de fallo: si la caché no está
+  // disponible o falla, se convierte igual.
+  let cache = null;
+  const cacheKey = new Request(canonicalUrl + "?__md=1", { method: "GET" });
+  try {
+    cache = caches.default;
+    const hit = await cache.match(cacheKey);
+    if (hit) return hit;
+  } catch (_) { cache = null; }
+
+  const assetRes = await env.ASSETS.fetch(
+    new Request(canonicalUrl, { method: "GET", headers: { Accept: "text/html" } })
+  );
+  if (!assetRes.ok) return null;
+  if (!/text\/html/i.test(assetRes.headers.get("Content-Type") || "")) return null;
+
+  const html = await assetRes.text();
+  const md = htmlToMarkdown(html, canonicalUrl);
+
+  const headers = new Headers({
+    "Content-Type": "text/markdown; charset=utf-8",
+    "Vary": "Accept",
+    "Cache-Control": "public, max-age=300, s-maxage=3600",
+    "X-Markdown-Tokens": String(Math.ceil(md.length / 4)),
+    "X-Original-Tokens": String(Math.ceil(html.length / 4)),
+    "X-Content-Type-Options": "nosniff",
+    "Link": "<" + canonicalUrl + '>; rel="canonical", </llms.txt>; rel="describedby"; type="text/plain"'
+  });
+  // La URL .md es contenido duplicado del HTML: fuera del índice.
+  if (explicit) headers.set("X-Robots-Tag", "noindex, follow");
+
+  const res = new Response(md, { status: 200, headers });
+  if (cache) {
+    try { ctx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {})); } catch (_) {}
+  }
+  return res;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -1890,6 +2097,13 @@ export default {
     if (url.pathname === "/api/tevi-agent/live-token") {
       return handleLiveToken(request, env);
     }
+    // Markdown para agentes: Accept: text/markdown o URL con sufijo .md.
+    // Si algo falla, el sitio sigue sirviendo HTML con normalidad.
+    try {
+      const md = await handleMarkdown(request, env, ctx);
+      if (md) return md;
+    } catch (_) { /* degradación silenciosa a HTML */ }
+
     // Todo lo demás: el sitio estático (lo sirve el binding ASSETS).
     return env.ASSETS.fetch(request);
   },

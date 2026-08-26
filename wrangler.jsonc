@@ -11,9 +11,32 @@
     "binding": "ASSETS",
     // Sitio multipágina (no SPA): si no existe el asset, 404.
     "not_found_handling": "404-page",
-    // Solo /api/* invoca al Worker; el resto se sirve como estático
-    // directamente (más rápido y menos invocaciones en el plan gratuito).
-    "run_worker_first": ["/api/*"]
+    // El Worker atiende /api/* y las páginas HTML (para poder negociar
+    // Markdown con los agentes vía `Accept: text/markdown` y las URLs .md).
+    // Las reglas negativas devuelven los assets pesados —CSS, JS, imágenes,
+    // fuentes, sitemap, robots, llms.txt— a la vía rápida estática, que es
+    // la inmensa mayoría de las peticiones.
+    "run_worker_first": [
+      "/*",
+      "!/assets/*",
+      "!/og.png",
+      "!/og.svg",
+      "!/favicon.ico",
+      "!/sitemap.xml",
+      "!/robots.txt",
+      "!/llms.txt",
+      "!/*.css",
+      "!/*.js",
+      "!/*.png",
+      "!/*.jpg",
+      "!/*.jpeg",
+      "!/*.svg",
+      "!/*.webp",
+      "!/*.ico",
+      "!/*.woff2",
+      "!/*.xml",
+      "!/*.txt"
+    ]
   },
   // Workers AI (gratis, sin clave externa) para el asistente Tevi.
   "ai": { "binding": "AI" },
